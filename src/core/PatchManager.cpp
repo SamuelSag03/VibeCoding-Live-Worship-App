@@ -55,11 +55,12 @@ bool PatchManager::addPluginToLayer (int patchIndex, int layerIndex,
     auto* p = getPatch (patchIndex);
     if (p == nullptr || plugin == nullptr || ! juce::isPositiveAndBelow (layerIndex, p->layers.size()))
         return false;
-    // El runtime activo apunta no-owner al mismo rack del patch, así que al
-    // añadir el slot al rack del patch ya suena si el patch está activo.
-    auto& layer = *p->layers[layerIndex];
-    layer.rack->addSlot (std::move (plugin));
-    layer.rack->prepare (lastSampleRate, lastMaxBlockSize);
+    // Se encola: el hilo de audio aplica el cambio en el límite de buffer
+    const juce::ScopedLock lock (pendingLock);
+    PendingOp op;
+    op.patchIndex = patchIndex; op.layerIndex = layerIndex; op.slotIndex = -1;
+    op.isAdd = true; op.plugin = std::move (plugin);
+    pendingOps.push_back (std::move (op));
     return true;
 }
 
@@ -68,7 +69,37 @@ bool PatchManager::removeSlotFromLayer (int patchIndex, int layerIndex, int slot
     auto* p = getPatch (patchIndex);
     if (p == nullptr || ! juce::isPositiveAndBelow (layerIndex, p->layers.size()))
         return false;
-    return p->layers[(size_t) layerIndex]->rack->removeSlot (slotIndex);
+    const juce::ScopedLock lock (pendingLock);
+    PendingOp op;
+    op.patchIndex = patchIndex; op.layerIndex = layerIndex; op.slotIndex = slotIndex;
+    op.isAdd = false;
+    pendingOps.push_back (std::move (op));
+    return true;
+}
+
+void PatchManager::applyPendingOps()
+{
+    std::vector<PendingOp> ops;
+    {
+        const juce::ScopedLock lock (pendingLock);
+        ops.swap (pendingOps);
+    }
+    for (auto& op : ops)
+    {
+        auto* p = getPatch (op.patchIndex);
+        if (p == nullptr || ! juce::isPositiveAndBelow (op.layerIndex, p->layers.size()))
+            continue;
+        auto& rack = *p->layers[(size_t) op.layerIndex]->rack;
+        if (op.isAdd)
+        {
+            rack.addSlot (std::move (op.plugin));
+            rack.prepare (lastSampleRate, lastMaxBlockSize); // el runtime activo comparte este rack
+        }
+        else
+        {
+            rack.removeSlot (op.slotIndex);
+        }
+    }
 }
 
 // ---------------------------------------------------------------- variations
@@ -250,6 +281,7 @@ void PatchManager::processLayer (const LayerDef& def, PluginRack& rack,
 void PatchManager::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     performSwapIfNeeded();
+    applyPendingOps();
 
     const int numSamples = buffer.getNumSamples();
 

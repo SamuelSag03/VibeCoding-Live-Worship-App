@@ -69,6 +69,8 @@ public:
     juce::StringArray getPatchNames() const;
 
     // --- layers ---
+    // NOTA: estas operaciones se encola y se aplican en el hilo de audio
+    // (los racks activos se tocan SOLO desde processBlock).
     int addLayer (int patchIndex, const juce::String& name);
     bool addPluginToLayer (int patchIndex, int layerIndex, std::unique_ptr<juce::AudioPluginInstance> plugin);
     bool removeSlotFromLayer (int patchIndex, int layerIndex, int slotIndex);
@@ -106,6 +108,7 @@ private:
 
     static std::unique_ptr<PatchRuntime> makeRuntime (const Patch& p);
     void performSwapIfNeeded();
+    void applyPendingOps(); // solo hilo de audio
     static void processLayer (const LayerDef& def, PluginRack& rack,
                               juce::AudioBuffer<float>& out, const juce::MidiBuffer& midiIn,
                               juce::AudioBuffer<float>& scratchBuf, int numSamples);
@@ -117,6 +120,15 @@ private:
     std::unique_ptr<PatchRuntime> runtimeA;
     std::unique_ptr<PatchRuntime> runtimeB;
     std::unique_ptr<PatchRuntime> tail;
+
+    struct PendingOp
+    {
+        int patchIndex, layerIndex, slotIndex;
+        bool isAdd;
+        std::unique_ptr<juce::AudioPluginInstance> plugin;
+    };
+    std::vector<PendingOp> pendingOps;
+    juce::CriticalSection pendingLock;
 
     std::atomic<int> activeIndex { -1 };
     std::atomic<int> pendingIndex { -1 };
