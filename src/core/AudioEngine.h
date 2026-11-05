@@ -25,9 +25,10 @@ public:
     /** Re-engancha el dispositivo tras un hot-swap (cambio de interfaz/teclado). */
     void rescanAndReopen();
 
-    void audioDeviceIOCallback (const float** inputChannelData, int numInputChannels,
-                                float** outputChannelData, int numOutputChannels,
-                                int numSamples) override;
+    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData, int numInputChannels,
+                                           float* const* outputChannelData, int numOutputChannels,
+                                           int numSamples,
+                                           const juce::AudioIODeviceCallbackContext& context) override;
     void audioDeviceAboutToStart (juce::AudioIODevice* device) override;
     void audioDeviceStopped() override;
 

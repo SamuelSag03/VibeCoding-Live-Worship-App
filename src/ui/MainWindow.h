@@ -14,6 +14,7 @@ public:
     MainWindow();
 
     void closeButtonPressed() override;
+    void resized() override;
 
 private:
     void timerCallback() override; // medidor de CPU/latencia/sync en vivo
@@ -81,7 +82,7 @@ private:
                 {
                     auto* layer = p->layers[row];
                     auto name = layer->name + "  [" + juce::String (layer->keyLow) + "-" + juce::String (layer->keyHigh) + "]";
-                    int nPlugins = layer->rack != nullptr ? layer->rack->getNumSlots() : 0;
+                    int nPlugins = owner.patchManager.getLayerSlotCount (owner.patchManager.getActivePatchIndex(), row);
                     name += "  (" + juce::String (nPlugins) + " plugins)";
                     g.drawText (juce::String (row + 1) + ". " + name, 8, 0, w - 8, h,
                                 juce::Justification::centredLeft);

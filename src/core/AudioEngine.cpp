@@ -15,7 +15,7 @@ void AudioEngine::setMidiRouter (MidiRouter* mr)     { midiRouter = mr; }
 
 juce::String AudioEngine::initialise (int numInputs, int numOutputs)
 {
-    auto types = deviceManager.getAvailableDeviceTypes();
+    const auto& types = deviceManager.getAvailableDeviceTypes();
     juce::String chosenType;
     for (auto* t : types)
         if (t->getTypeName().containsIgnoreCase ("jack"))
@@ -60,8 +60,9 @@ void AudioEngine::audioDeviceStopped()
         patchManager->releaseResources();
 }
 
-void AudioEngine::audioDeviceIOCallback (const float** in, int numIn,
-                                         float** out, int numOut, int numSamples)
+void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* in, int numIn,
+                                                    float* const* out, int numOut, int numSamples,
+                                                    const juce::AudioIODeviceCallbackContext&)
 {
     juce::AudioBuffer<float> buffer (numOut, numSamples);
     buffer.clear();

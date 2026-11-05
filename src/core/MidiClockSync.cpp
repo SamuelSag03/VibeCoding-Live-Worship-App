@@ -29,7 +29,7 @@ void MidiClockSync::handleTransport (const juce::MidiMessage& m)
     else if (m.isSongPositionPointer())
     {
         // SPP: valor de 14 bits, cada unidad = 6 pulsos de reloj
-        ticks.store ((juce::int64) m.getSongPositionPointerMidiValue() * 6);
+        ticks.store ((juce::int64) m.getSongPositionPointerMidiBeat() * 6);
     }
 }
 
