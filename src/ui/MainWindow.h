@@ -14,6 +14,7 @@ public:
     MainWindow();
 
     void closeButtonPressed() override;
+    void resized() override;
 
 private:
     void timerCallback() override; // medidor de CPU/latencia/sync en vivo

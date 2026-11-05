@@ -52,14 +52,11 @@ MainWindow::MainWindow()
     auto* content = new juce::Component();
 
     patchList.setModel (&listModel);
-    patchList.setBounds (10, 10, 280, 200);
     content->addAndMakeVisible (patchList);
 
     layerList.setModel (&layerModel);
-    layerList.setBounds (10, 220, 280, 120);
     content->addAndMakeVisible (layerList);
 
-    addLayerButton.setBounds (10, 350, 90, 24);
     addLayerButton.onClick = [this]
     {
         const int patchIndex = patchList.getSelectedRow() >= 0 ? patchList.getSelectedRow()
@@ -72,24 +69,21 @@ MainWindow::MainWindow()
     };
     content->addAndMakeVisible (addLayerButton);
 
-    addPluginButton.setBounds (105, 350, 90, 24);
     addPluginButton.onClick = [this] { addPluginToSelectedLayer(); };
     content->addAndMakeVisible (addPluginButton);
 
-    removeSlotButton.setBounds (200, 350, 90, 24);
     removeSlotButton.onClick = [this] { removeSelectedSlot(); };
     content->addAndMakeVisible (removeSlotButton);
 
-    saveButton.setBounds (10, 380, 130, 24);
     saveButton.onClick = [this] { saveConcert(); };
     content->addAndMakeVisible (saveButton);
 
-    loadButton.setBounds (150, 380, 140, 24);
     loadButton.onClick = [this] { loadConcert(); };
     content->addAndMakeVisible (loadButton);
 
-    statusLabel.setBounds (10, 412, 280, 50);
     statusLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    statusLabel.setJustificationType (juce::Justification::topLeft);
+    statusLabel.setMinimumHorizontalScale (1.0f);
     statusLabel.setText ("Audio: " + (err.isEmpty() ? audioEngine.getCurrentDeviceName()
                                                   : "ERROR: " + err),
                          juce::dontSendNotification);
@@ -101,10 +95,39 @@ MainWindow::MainWindow()
     patchManager.addPatch ("01 - Piano YC88");
     patchManager.addPatch ("02 - Strings");
     patchManager.addPatch ("03 - Pad Atmosphere");
+    patchList.selectRow (0);
+    patchManager.selectPatch (0);
 
     setContentOwned (content, true);
-    centreWithSize (320, 480);
+    centreWithSize (420, 560);
+    resized(); // asegura el layout inicial
     setVisible (true);
+}
+
+void MainWindow::resized()
+{
+    auto* c = getContentComponent();
+    if (c == nullptr) return;
+    auto area = c->getLocalBounds().reduced (8);
+
+    auto status = area.removeFromBottom (64);
+    statusLabel.setBounds (status);
+
+    auto buttons = area.removeFromBottom (30);
+    const int bw = (buttons.getWidth() - 16) / 3;
+    addLayerButton.setBounds   (buttons.removeFromLeft (bw).reduced (2));
+    addPluginButton.setBounds  (buttons.removeFromLeft (bw).reduced (2));
+    removeSlotButton.setBounds (buttons.removeFromLeft (bw).reduced (2));
+
+    auto io = area.removeFromBottom (30);
+    const int iw = (io.getWidth() - 8) / 2;
+    saveButton.setBounds (io.removeFromLeft (iw).reduced (2));
+    loadButton.setBounds (io.removeFromLeft (iw).reduced (2));
+
+    auto layers = area.removeFromBottom (juce::jmax (80, area.getHeight() / 3));
+    layerList.setBounds (layers);
+
+    patchList.setBounds (area);
 }
 
 void MainWindow::refreshPatchList() { patchList.updateContent(); }
