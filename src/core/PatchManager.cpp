@@ -13,7 +13,7 @@ int PatchManager::addPatch (const juce::String& name)
 
 bool PatchManager::removePatch (int index)
 {
-    if (! isPositiveAndBelow (index, getNumPatches()))
+    if (! juce::isPositiveAndBelow (index, getNumPatches()))
         return false;
     patches.erase (patches.begin() + index);
     return true;
@@ -21,12 +21,12 @@ bool PatchManager::removePatch (int index)
 
 PatchManager::Patch* PatchManager::getPatch (int index)
 {
-    return isPositiveAndBelow (index, getNumPatches()) ? &patches[(size_t) index] : nullptr;
+    return juce::isPositiveAndBelow (index, getNumPatches()) ? &patches[(size_t) index] : nullptr;
 }
 
 const PatchManager::Patch* PatchManager::getPatch (int index) const
 {
-    return isPositiveAndBelow (index, getNumPatches()) ? &patches[(size_t) index] : nullptr;
+    return juce::isPositiveAndBelow (index, getNumPatches()) ? &patches[(size_t) index] : nullptr;
 }
 
 juce::StringArray PatchManager::getPatchNames() const
@@ -49,31 +49,26 @@ int PatchManager::addLayer (int patchIndex, const juce::String& name)
     return idx;
 }
 
-bool PatchManager::addPluginToLayer (int patchIndex, int layerIndex, juce::AudioPluginInstance* plugin)
+bool PatchManager::addPluginToLayer (int patchIndex, int layerIndex,
+                                     std::unique_ptr<juce::AudioPluginInstance> plugin)
 {
     auto* p = getPatch (patchIndex);
-    if (p == nullptr || plugin == nullptr || ! isPositiveAndBelow (layerIndex, p->layers.size()))
+    if (p == nullptr || plugin == nullptr || ! juce::isPositiveAndBelow (layerIndex, p->layers.size()))
         return false;
+    // El runtime activo apunta no-owner al mismo rack del patch, así que al
+    // añadir el slot al rack del patch ya suena si el patch está activo.
     auto& layer = *p->layers[layerIndex];
-    layer.rack->addSlot (plugin);
+    layer.rack->addSlot (std::move (plugin));
     layer.rack->prepare (lastSampleRate, lastMaxBlockSize);
-
-    // Si el patch está activo, también entra en el runtime que suena
-    if (patchIndex == activeIndex.load() && runtimeA != nullptr
-        && isPositiveAndBelow (layerIndex, runtimeA->layerRacks.size()))
-    {
-        runtimeA->layerRacks[layerIndex]->addSlot (plugin);
-        runtimeA->layerRacks[layerIndex]->prepare (lastSampleRate, lastMaxBlockSize);
-    }
     return true;
 }
 
 bool PatchManager::removeSlotFromLayer (int patchIndex, int layerIndex, int slotIndex)
 {
     auto* p = getPatch (patchIndex);
-    if (p == nullptr || ! isPositiveAndBelow (layerIndex, p->layers.size()))
+    if (p == nullptr || ! juce::isPositiveAndBelow (layerIndex, p->layers.size()))
         return false;
-    return p->layers[layerIndex]->rack->removeSlot (slotIndex);
+    return p->layers[(size_t) layerIndex]->rack->removeSlot (slotIndex);
 }
 
 // ---------------------------------------------------------------- variations
@@ -93,30 +88,22 @@ void PatchManager::selectVariation (int patchIndex, int variationIndex)
     if (p == nullptr) return;
     p->activeVariation = variationIndex;
 
-    // Aplica overrides a los layers activos (switch instantáneo, sin swap)
     if (patchIndex == activeIndex.load() && runtimeA != nullptr)
     {
         for (int i = 0; i < runtimeA->layerDefs.size(); ++i)
-            runtimeA->layerDefs.getReference (i).gain = p->layers[i]->gain;
-        if (isPositiveAndBelow (variationIndex, p->variations.size()))
+            runtimeA->layerDefs.getReference (i).gain = p->layers[(size_t) i]->gain;
+
+        if (juce::isPositiveAndBelow (variationIndex, p->variations.size()))
         {
-            for (auto& ov : p->variations.getReference (variationIndex).overrides)
-                if (isPositiveAndBelow (ov.layerIndex, runtimeA->layerDefs.size()))
+            for (auto& ov : p->variations.getReference ((size_t) variationIndex).overrides)
+                if (juce::isPositiveAndBelow (ov.layerIndex, runtimeA->layerDefs.size()))
                 {
-                    runtimeA->layerDefs.getReference (ov.layerIndex).gain = ov.gain;
-                    // bypass del rack completo de ese layer:
-                    for (int s = 0; s < runtimeA->layerRacks[ov.layerIndex]->getNumSlots(); ++s)
-                        runtimeA->layerRacks[ov.layerIndex]->setSlotBypassed (s, ov.bypass);
+                    runtimeA->layerDefs.getReference ((size_t) ov.layerIndex).gain = ov.gain;
+                    for (int s = 0; s < runtimeA->layerRacks[(size_t) ov.layerIndex]->getNumSlots(); ++s)
+                        runtimeA->layerRacks[(size_t) ov.layerIndex]->setSlotBypassed (s, ov.bypass);
                 }
         }
     }
-}
-
-void PatchManager::setActiveLayerBypassed (int layerIndex, bool bypassed)
-{
-    if (runtimeA != nullptr && isPositiveAndBelow (layerIndex, runtimeA->layerRacks.size()))
-        for (int s = 0; s < runtimeA->layerRacks[layerIndex]->getNumSlots(); ++s)
-            runtimeA->layerRacks[layerIndex]->setSlotBypassed (s, bypassed);
 }
 
 int PatchManager::getActiveVariation (int patchIndex) const
@@ -125,13 +112,18 @@ int PatchManager::getActiveVariation (int patchIndex) const
     return p != nullptr ? p->activeVariation : -1;
 }
 
+void PatchManager::setActiveLayerBypassed (int layerIndex, bool bypassed)
+{
+    if (runtimeA != nullptr && juce::isPositiveAndBelow (layerIndex, runtimeA->layerRacks.size()))
+        for (int s = 0; s < runtimeA->layerRacks[(size_t) layerIndex]->getNumSlots(); ++s)
+            runtimeA->layerRacks[(size_t) layerIndex]->setSlotBypassed (s, bypassed);
+}
+
 // ---------------------------------------------------------------- switching
 void PatchManager::selectPatch (int index)
 {
-    if (isPositiveAndBelow (index, getNumPatches()))
+    if (juce::isPositiveAndBelow (index, getNumPatches()))
     {
-        // Preparamos el patch destino en hilo de mensaje: el swap en el hilo
-        // de audio nunca prepara en caliente.
         auto* p = getPatch (index);
         for (auto* layer : p->layers)
             layer->rack->prepare (lastSampleRate, lastMaxBlockSize);
@@ -141,16 +133,25 @@ void PatchManager::selectPatch (int index)
     }
 }
 
-void PatchManager::selectNextPatch()     { selectPatch (activeIndex.load() < getNumPatches() - 1 ? activeIndex.load() + 1 : 0); }
-void PatchManager::selectPreviousPatch() { selectPatch (activeIndex.load() > 0 ? activeIndex.load() - 1 : juce::jmax (0, getNumPatches() - 1)); }
-
-std::unique_ptr<PatchManager::PatchRuntime> makeRuntime (const PatchManager::Patch& p)
+void PatchManager::selectNextPatch()
 {
-    auto rt = std::make_unique<PatchManager::PatchRuntime>();
+    const int cur = activeIndex.load();
+    selectPatch (juce::isPositiveAndBelow (cur, getNumPatches() - 1) ? cur + 1 : 0);
+}
+
+void PatchManager::selectPreviousPatch()
+{
+    const int cur = activeIndex.load();
+    selectPatch (cur > 0 ? cur - 1 : juce::jmax (0, getNumPatches() - 1));
+}
+
+std::unique_ptr<PatchManager::PatchRuntime> PatchManager::makeRuntime (const Patch& p)
+{
+    auto rt = std::make_unique<PatchRuntime>();
     for (auto* layer : p.layers)
     {
-        rt->layerRacks.add (layer->rack.get()); // no-owner: el rack vive en el patch
-        PatchManager::LayerDef def;
+        rt->layerRacks.add (layer->rack.get());
+        LayerDef def;
         def.keyLow = layer->keyLow; def.keyHigh = layer->keyHigh;
         def.channelFilter = layer->channelFilter; def.transpose = layer->transpose;
         def.gain = layer->gain; def.pan = layer->pan; def.outputBus = layer->outputBus;
@@ -165,13 +166,13 @@ void PatchManager::performSwapIfNeeded()
         return;
 
     const int next = pendingIndex.load();
-    if (! isPositiveAndBelow (next, getNumPatches()))
+    if (! juce::isPositiveAndBelow (next, getNumPatches()))
     {
         swapPending.store (false);
         return;
     }
 
-    tail = std::move (runtimeA);          // patch persist: sigue sonando en cola
+    tail = std::move (runtimeA);          // patch persist
     runtimeA = std::move (runtimeB);
     runtimeB = makeRuntime (*getPatch (next));
 
@@ -210,25 +211,23 @@ void PatchManager::processLayer (const LayerDef& def, PluginRack& rack,
                                  juce::AudioBuffer<float>& out, const juce::MidiBuffer& midiIn,
                                  juce::AudioBuffer<float>& scratchBuf, int numSamples)
 {
-    // Filtra el MIDI para esta zona (split/layer) y lo manda solo a este layer
     juce::MidiBuffer layerMidi;
     for (auto meta : midiIn)
     {
         auto m = meta.getMessage();
-        if (! m.isNoteOnOrOff() && ! m.isController() && ! m.isPitchWheel() && ! m.isAftertouch())
-        {
-            layerMidi.addEvent (m, meta.getTimeStamp());
-            continue;
-        }
-        if (def.channelFilter > 0 && m.getChannel() != def.channelFilter)
-            continue;
         if (m.isNoteOnOrOff())
         {
-            int n = m.getNoteNumber();
+            if (def.channelFilter > 0 && m.getChannel() != def.channelFilter)
+                continue;
+            const int n = m.getNoteNumber();
             if (n < def.keyLow || n > def.keyHigh)
                 continue;
             if (def.transpose != 0)
                 m.setNoteNumber (juce::jlimit (0, 127, n + def.transpose));
+        }
+        else if (def.channelFilter > 0 && m.getChannel() != def.channelFilter)
+        {
+            continue;
         }
         layerMidi.addEvent (m, meta.getTimeStamp());
     }
@@ -237,7 +236,6 @@ void PatchManager::processLayer (const LayerDef& def, PluginRack& rack,
     scratchBuf.clear();
     rack.process (scratchBuf, layerMidi);
 
-    // Mezcla al bus de salida con gain/pan
     const int chL = juce::jmin (def.outputBus * 2, out.getNumChannels() - 1);
     const int chR = juce::jmin (chL + 1, out.getNumChannels() - 1);
     const float gl = def.gain * (def.pan <= 0.0f ? 1.0f : 1.0f - def.pan);
@@ -257,7 +255,7 @@ void PatchManager::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     if (runtimeA != nullptr)
         for (int i = 0; i < runtimeA->layerDefs.size(); ++i)
-            processLayer (runtimeA->layerDefs.getReference (i), *runtimeA->layerRacks[i],
+            processLayer (runtimeA->layerDefs.getReference ((size_t) i), *runtimeA->layerRacks[(size_t) i],
                           buffer, midiMessages, scratch, numSamples);
 
     // Cola del patch anterior (patch persist) con fade-out
@@ -267,7 +265,7 @@ void PatchManager::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         tailBuf.clear();
         juce::MidiBuffer emptyMidi;
         for (int i = 0; i < tail->layerDefs.size(); ++i)
-            processLayer (tail->layerDefs.getReference (i), *tail->layerRacks[i],
+            processLayer (tail->layerDefs.getReference ((size_t) i), *tail->layerRacks[(size_t) i],
                           tailBuf, emptyMidi, scratch, numSamples);
 
         const int fadeLen = juce::jmin (crossfadeSamples, numSamples);
@@ -305,7 +303,7 @@ juce::XmlElement PatchManager::toXml() const
             lXml->setAttribute ("pan", (double) layer->pan);
             lXml->setAttribute ("outputBus", layer->outputBus);
             if (layer->rack != nullptr)
-                lXml->addChildElement (layer->rack->toXml().createCopy());
+                lXml->addChildElement (new juce::XmlElement (layer->rack->toXml()));
         }
         for (auto& v : p.variations)
         {
@@ -351,7 +349,7 @@ bool PatchManager::fromXml (const juce::XmlElement& concertXml)
                 layer->outputBus = lXml->getIntAttribute ("outputBus", 0);
                 layer->rack = std::make_unique<PluginRack>();
                 if (auto* rackXml = lXml->getChildByName ("rack"))
-                    PluginRack::fromXml (*layer->rack, *rackXml, *formatManager);
+                    PluginRack::fromXml (*layer->rack, *rackXml, *formatManager, knownTypes);
                 p.layers.add (layer);
             }
             else if (lXml->hasTagName ("variation"))

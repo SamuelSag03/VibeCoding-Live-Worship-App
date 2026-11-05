@@ -6,15 +6,15 @@ AudioEngine::AudioEngine() = default;
 
 AudioEngine::~AudioEngine()
 {
-    deviceManager.closeAudioDevice();
     deviceManager.removeAudioCallback (this);
+    deviceManager.closeAudioDevice();
 }
 
 void AudioEngine::setPatchManager (PatchManager* pm) { patchManager = pm; }
+void AudioEngine::setMidiRouter (MidiRouter* mr)     { midiRouter = mr; }
 
-juce::String AudioEngine::initialise (int numInputs, int numOutputs, int sampleRate, int bufferSize)
+juce::String AudioEngine::initialise (int numInputs, int numOutputs)
 {
-    // Preferimos JACK (mejor latencia y hot-swap en Linux); si no está, ALSA.
     auto types = deviceManager.getAvailableDeviceTypes();
     juce::String chosenType;
     for (auto* t : types)
@@ -28,17 +28,11 @@ juce::String AudioEngine::initialise (int numInputs, int numOutputs, int sampleR
         chosenType = types.getFirst()->getTypeName();
 
     if (chosenType.isEmpty())
-        return "No se encontró ningún dispositivo de audio (instala jack2/pipewire-jack o alsa).";
+        return "No se encontro ningun dispositivo de audio (instala jack2/pipewire-jack o alsa).";
 
     lastError = deviceManager.initialise (numInputs, numOutputs, nullptr, true, chosenType, nullptr);
     if (lastError.isNotEmpty())
         return lastError;
-
-    if (auto* dev = deviceManager.getCurrentAudioDevice())
-    {
-        dev->setSampleRateIfSupported ((double) sampleRate);
-        dev->setBufferSizeIfSupported (bufferSize);
-    }
 
     deviceManager.addAudioCallback (this);
     return {};
@@ -46,7 +40,7 @@ juce::String AudioEngine::initialise (int numInputs, int numOutputs, int sampleR
 
 void AudioEngine::rescanAndReopen()
 {
-    // Tras un hot-swap (cambio de interfaz/teclado USB): reescanea y reabre sin parar.
+    deviceManager.removeAudioCallback (this);
     deviceManager.closeAudioDevice();
     lastError = deviceManager.initialise (2, 2, nullptr, true, {}, nullptr);
     deviceManager.addAudioCallback (this);
@@ -69,26 +63,22 @@ void AudioEngine::audioDeviceStopped()
 void AudioEngine::audioDeviceIOCallback (const float** in, int numIn,
                                          float** out, int numOut, int numSamples)
 {
-    juce::AudioBuffer<float> inBuffer (numIn, numSamples);
-    inBuffer.copyFromArray (0, in, numIn, numSamples);
-    juce::AudioBuffer<float> buffer (juce::jmax (numIn, numOut), numSamples);
-    buffer.copyFrom (0, 0, inBuffer, 0, 0, juce::jmin (numIn, buffer.getNumChannels()));
+    juce::AudioBuffer<float> buffer (numOut, numSamples);
+    buffer.clear();
+
+    // Entradas (audio de teclados con interfaz propia) a las primeras canales
+    for (int ch = 0; ch < juce::jmin (numIn, numOut); ++ch)
+        juce::FloatVectorOperations::copy (buffer.getWritePointer (ch), in[ch], numSamples);
 
     juce::MidiBuffer midi;
-    // (los mensajes MIDI llegan por MidiRouter; aquí sólo procesamos audio)
+    if (midiRouter != nullptr)
+        midiRouter->drainInto (midi);
 
     if (patchManager != nullptr)
         patchManager->processBlock (buffer, midi);
 
     for (int ch = 0; ch < numOut; ++ch)
-        juce::FloatVectorOperations::copy (out[ch], buffer.getReadPointer (juce::jmin (ch, buffer.getNumChannels() - 1)), numSamples);
-}
-
-void AudioEngine::audioDeviceIOCallbackWithDevices (const float* const* in, int numIn,
-                                                    float* const* out, int numOut,
-                                                    int numSamples, int /*deviceIndex*/)
-{
-    audioDeviceIOCallback (in, numIn, out, numOut, numSamples);
+        juce::FloatVectorOperations::copy (out[ch], buffer.getReadPointer (ch), numSamples);
 }
 
 juce::String AudioEngine::getCurrentDeviceName() const

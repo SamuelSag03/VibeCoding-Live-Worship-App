@@ -26,6 +26,7 @@ private:
 
     AudioEngine audioEngine;
     juce::AudioPluginFormatManager formatManager;
+    juce::Array<juce::PluginDescription> knownTypes;
     PatchManager patchManager;
     MidiRouter midiRouter;
     MidiClockSync clockSync;
@@ -51,7 +52,7 @@ private:
             g.fillAll (selected ? juce::Colours::darkblue : juce::Colours::black);
             g.setColour (juce::Colours::white);
             auto names = owner.patchManager.getPatchNames();
-            if (isPositiveAndBelow (row, names.size()))
+            if (juce::isPositiveAndBelow (row, names.size()))
                 g.drawText (juce::String (row + 1) + ". " + names[row], 8, 0, w - 8, h,
                             juce::Justification::centredLeft);
         }
@@ -76,7 +77,7 @@ private:
             g.fillAll (selected ? juce::Colours::darkblue : juce::Colours::black);
             g.setColour (juce::Colours::white);
             if (auto* p = owner.patchManager.getPatch (owner.patchManager.getActivePatchIndex()))
-                if (isPositiveAndBelow (row, p->layers.size()))
+                if (juce::isPositiveAndBelow (row, p->layers.size()))
                 {
                     auto* layer = p->layers[row];
                     auto name = layer->name + "  [" + juce::String (layer->keyLow) + "-" + juce::String (layer->keyHigh) + "]";

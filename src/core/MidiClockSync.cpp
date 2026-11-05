@@ -2,15 +2,14 @@
 
 void MidiClockSync::handleTransport (const juce::MidiMessage& m)
 {
-    if (m.isStart() || m.isContinue())
+    if (m.isMidiStart() || m.isMidiContinue())
     {
         playing.store (true);
         ticks.store (0);
         clocksSinceLastBeat = 0;
         lastBeatTime = juce::Time::getCurrentTime();
-        lastBeatTimeSeconds = 0.0;
     }
-    else if (m.isStop())
+    else if (m.isMidiStop())
     {
         playing.store (false);
     }
@@ -30,7 +29,7 @@ void MidiClockSync::handleTransport (const juce::MidiMessage& m)
     else if (m.isSongPositionPointer())
     {
         // SPP: valor de 14 bits, cada unidad = 6 pulsos de reloj
-        ticks.store ((int64) m.getSongPositionPointerMidiValue() * 6);
+        ticks.store ((juce::int64) m.getSongPositionPointerMidiValue() * 6);
     }
 }
 

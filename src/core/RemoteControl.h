@@ -6,19 +6,14 @@
 class PatchManager;
 
 /**
- * RemoteControl
- * -------------
- * Control remoto de la app, clave para un worship leader que dispara patches desde
- * otro dispositivo (tablet, Stream Deck, pedalera MIDI, etc.):
+ * RemoteControl — control remoto de la app (OSC UDP + mapeo MIDI personalizable).
  *
- *  OSC (UDP, puerto por defecto 8000) — mensajes personalizables:
- *    /patch/select <int>     -> selecciona patch por índice
- *    /patch/next  /patch/prev
- *    /patch/name             -> responde con el nombre del patch activo
- *    /rack/bypass <slot> <0|1>
+ *  OSC (puerto 8000 por defecto):
+ *    /patch/select <int>  /patch/next  /patch/prev  /layer/bypass <layer> <0|1>
  *
- *  MIDI — mapeo personalizable (CC/PC/Note → acción):
- *    CC/PC/Note -> patch siguiente/anterior, seleccionar patch N, bypass de slot.
+ *  MIDI: tabla MidiMapping { key = (status & 0xF0) | numero, action, param }
+ *    action: 0 = siguiente patch, 1 = anterior, 2 = seleccionar patch (param),
+ *            3 = bypass de layer (param = índice de layer)
  */
 class RemoteControl final : private juce::OSCReceiver::Listener<juce::OSCReceiver::RealtimeCallback>
 {
@@ -29,14 +24,17 @@ public:
     void start (PatchManager* pm, int oscPort = 8000);
     void stop();
 
-    /** Mapeo MIDI: (statusByte & 0xF0, data1) -> acción. Llamar desde el router MIDI. */
     void handleMidiRemote (const juce::MidiMessage& m);
 
-    // --- Mapeo personalizable (persistente en el concert) ---
+    void selectPatch (int index);
+    void nextPatch();
+    void prevPatch();
+    void setLayerBypass (int layer, bool bypassed);
+
     struct MidiMapping
     {
-        int key;    // (status & 0xF0) | numero (CC/PC/Note)
-        int action; // 0 = siguiente, 1 = anterior, 2 = seleccionar patch (param = índice), 3 = bypass slot (param = slot)
+        int key;    // (status & 0xF0) | numero de CC/PC/Note
+        int action; // 0 = siguiente, 1 = anterior, 2 = patch N, 3 = bypass layer
         int param;
     };
 
@@ -45,12 +43,6 @@ public:
 
     juce::XmlElement toXml() const;
     void fromXml (const juce::XmlElement& xml);
-
-    // Acciones públicas (también invocadas por OSC/MIDI)
-    void selectPatch (int index);
-    void nextPatch();
-    void prevPatch();
-    void setSlotBypass (int slot, bool bypassed);
 
     bool isOscConnected() const { return connected.load(); }
     int getOscPort() const { return port; }
@@ -63,6 +55,7 @@ private:
     juce::OSCReceiver oscReceiver;
     int port = 8000;
     std::atomic<bool> connected { false };
+    juce::Array<MidiMapping> midiMappings;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RemoteControl)
 };

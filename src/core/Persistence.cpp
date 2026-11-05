@@ -7,8 +7,8 @@ namespace Persistence
     bool saveConcert (const PatchManager& pm, const RemoteControl& rc, const juce::File& file)
     {
         juce::XmlElement root ("livekeys");
-        root.addChildElement (pm.toXml().createCopy());
-        root.addChildElement (rc.toXml().createCopy());
+        root.addChildElement (new juce::XmlElement (pm.toXml()));
+        root.addChildElement (new juce::XmlElement (rc.toXml()));
         return root.writeTo (file);
     }
 

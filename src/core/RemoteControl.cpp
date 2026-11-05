@@ -25,10 +25,10 @@ void RemoteControl::stop()
 void RemoteControl::selectPatch (int index) { if (patchManager) patchManager->selectPatch (index); }
 void RemoteControl::nextPatch()             { if (patchManager) patchManager->selectNextPatch(); }
 void RemoteControl::prevPatch()             { if (patchManager) patchManager->selectPreviousPatch(); }
-void RemoteControl::setSlotBypass (int slot, bool bypassed)
+void RemoteControl::setLayerBypass (int layer, bool bypassed)
 {
     if (patchManager != nullptr)
-        patchManager->setActiveLayerBypassed (slot, bypassed);
+        patchManager->setActiveLayerBypassed (layer, bypassed);
 }
 
 void RemoteControl::oscMessageReceived (const juce::OSCMessage& message)
@@ -41,8 +41,8 @@ void RemoteControl::oscMessageReceived (const juce::OSCMessage& message)
         nextPatch();
     else if (addr == "/patch/prev")
         prevPatch();
-    else if (addr == "/rack/bypass" && message.size() >= 2)
-        setSlotBypass (message[0].getInt32(), message[1].getInt32() != 0);
+    else if (addr == "/layer/bypass" && message.size() >= 2)
+        setLayerBypass (message[0].getInt32(), message[1].getInt32() != 0);
 }
 
 void RemoteControl::oscBundleReceived (const juce::OSCBundle& bundle)
@@ -54,26 +54,27 @@ void RemoteControl::oscBundleReceived (const juce::OSCBundle& bundle)
 void RemoteControl::handleMidiRemote (const juce::MidiMessage& m)
 {
     // 1) Mapeo personalizable (cargado del concert)
-    const int key = (m.getRawData()[0] & 0xF0) | (m.getRawDataSize() > 1 ? m.getRawData()[1] : 0);
-    for (auto& map : midiMappings)
+    if (m.getRawDataSize() >= 2)
     {
-        if (map.key == key)
+        const int key = (m.getRawData()[0] & 0xF0) | m.getRawData()[1];
+        for (auto& map : midiMappings)
         {
-            switch (map.action)
+            if (map.key == key)
             {
-                case 0: nextPatch(); break;
-                case 1: prevPatch(); break;
-                case 2: selectPatch (map.param); break;
-                case 3: setSlotBypass (map.param, true); break;
-                default: break;
+                switch (map.action)
+                {
+                    case 0: nextPatch(); break;
+                    case 1: prevPatch(); break;
+                    case 2: selectPatch (map.param); break;
+                    case 3: setLayerBypass (map.param, true); break;
+                    default: break;
+                }
+                return;
             }
-            return;
         }
     }
 
-    // 2) Mapeo por defecto si no hay mapeo configurado:
-    //    PC cualquier valor -> selecciona patch (valor = índice)
-    //    CC 115 -> siguiente, CC 116 -> anterior
+    // 2) Mapeo por defecto si no hay mapeo configurado
     if (midiMappings.isEmpty())
     {
         if (m.isProgramChange())

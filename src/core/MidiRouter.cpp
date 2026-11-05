@@ -7,9 +7,7 @@ MidiRouter::MidiRouter() { refreshDevices(); }
 MidiRouter::~MidiRouter()
 {
     for (auto& in : openInputs)
-    {
         in->stop();
-    }
 }
 
 void MidiRouter::refreshDevices()
@@ -28,35 +26,21 @@ void MidiRouter::refreshDevices()
 
 void MidiRouter::handleIncomingMidiMessage (juce::MidiInput* /*source*/, const juce::MidiMessage& message)
 {
-    // Transporte: va al reloj de sync (Ableton Live → MIDI Clock)
-    if (message.isMidiClock() || message.isStart() || message.isStop() ||
-        message.isContinue() || message.isSongPositionPointer())
+    // Transporte: va al reloj de sync (Ableton Live -> MIDI Clock)
+    if (message.isMidiClock() || message.isMidiStart() || message.isMidiStop() ||
+        message.isMidiContinue() || message.isSongPositionPointer())
     {
         if (clockSync != nullptr)
             clockSync->handleTransport (message);
         return;
     }
 
-    // Filtro por canal del patch activo
-    if (channelFilter > 0 && message.getChannel() != channelFilter)
-        return;
-
-    juce::MidiMessage out = message;
-
-    // Split por rango de notas
-    if (splitLow >= 0 && out.isNoteOnOrOff())
-    {
-        const int n = out.getNoteNumber();
-        if (n < splitLow || n > splitHigh)
-            return;
-    }
-
-    // Transposición
-    if (transpose != 0 && out.isNoteOnOrOff())
-        out.setNoteNumber (juce::jlimit (0, 127, out.getNoteNumber() + transpose));
+    // Control remoto por MIDI (mapeo personalizable)
+    if (remoteControl != nullptr)
+        remoteControl->handleMidiRemote (message);
 
     const juce::ScopedLock lock (pendingLock);
-    pending.addEvent (out, 0);
+    pending.addEvent (message, 0);
 }
 
 void MidiRouter::drainInto (juce::MidiBuffer& destination)
@@ -76,7 +60,3 @@ juce::StringArray MidiRouter::getOpenDeviceNames() const
         names.add (in->getName());
     return names;
 }
-
-void MidiRouter::setChannelFilter (int channel) { channelFilter = channel; }
-void MidiRouter::setTranspose (int semitones)   { transpose = semitones; }
-void MidiRouter::setSplit (int lowNote, int highNote) { splitLow = lowNote; splitHigh = highNote; }
