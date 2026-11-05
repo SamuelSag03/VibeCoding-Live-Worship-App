@@ -106,6 +106,7 @@ MainWindow::MainWindow()
 
 void MainWindow::resized()
 {
+    juce::DocumentWindow::resized(); // ajusta el componente de contenido al tamaño de la ventana
     auto* c = getContentComponent();
     if (c == nullptr) return;
     auto area = c->getLocalBounds().reduced (8);
