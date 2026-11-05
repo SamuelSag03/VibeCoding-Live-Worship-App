@@ -60,8 +60,9 @@ void AudioEngine::audioDeviceStopped()
         patchManager->releaseResources();
 }
 
-void AudioEngine::audioDeviceIOCallback (const float* const* in, int numIn,
-                                         float* const* out, int numOut, int numSamples)
+void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* in, int numIn,
+                                                    float* const* out, int numOut, int numSamples,
+                                                    const juce::AudioIODeviceCallbackContext&)
 {
     juce::AudioBuffer<float> buffer (numOut, numSamples);
     buffer.clear();

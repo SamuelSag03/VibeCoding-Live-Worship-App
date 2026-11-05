@@ -217,8 +217,14 @@ void MainWindow::saveConcert()
     juce::FileChooser chooser ("Guardar concert como…",
                                juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
                                "*.livekeys.xml");
-    if (chooser.browseForFileToSave (true))
-        Persistence::saveConcert (patchManager, remoteControl, chooser.getResult());
+    chooser.launchAsync (juce::FileBrowserComponent::saveMode
+                         | juce::FileBrowserComponent::canSelectFiles
+                         | juce::FileBrowserComponent::warnAboutOverwriting,
+                         [this] (const juce::FileChooser& c)
+    {
+        if (c.getResult().existsAsFile() || c.getResult().getFileName().isNotEmpty())
+            Persistence::saveConcert (patchManager, remoteControl, c.getResult());
+    });
 }
 
 void MainWindow::loadConcert()
@@ -226,14 +232,17 @@ void MainWindow::loadConcert()
     juce::FileChooser chooser ("Cargar concert…",
                                juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
                                "*.livekeys.xml");
-    if (chooser.browseForFileToOpen())
+    chooser.launchAsync (juce::FileBrowserComponent::openMode
+                         | juce::FileBrowserComponent::canSelectFiles,
+                         [this] (const juce::FileChooser& c)
     {
-        if (Persistence::loadConcert (patchManager, remoteControl, chooser.getResult()))
+        if (c.getResult().existsAsFile()
+            && Persistence::loadConcert (patchManager, remoteControl, c.getResult()))
         {
             refreshPatchList();
             refreshLayerList();
         }
-    }
+    });
 }
 
 void MainWindow::closeButtonPressed()
