@@ -29,6 +29,15 @@ const PatchManager::Patch* PatchManager::getPatch (int index) const
     return juce::isPositiveAndBelow (index, getNumPatches()) ? &patches[(size_t) index] : nullptr;
 }
 
+int PatchManager::getLayerSlotCount (int patchIndex, int layerIndex) const
+{
+    const juce::ScopedLock lock (pendingLock);
+    auto* p = getPatch (patchIndex);
+    if (p == nullptr || ! juce::isPositiveAndBelow (layerIndex, p->layers.size()))
+        return 0;
+    return p->layers[(size_t) layerIndex]->rack->getNumSlots();
+}
+
 juce::StringArray PatchManager::getPatchNames() const
 {
     juce::StringArray names;
@@ -55,6 +64,10 @@ bool PatchManager::addPluginToLayer (int patchIndex, int layerIndex,
     auto* p = getPatch (patchIndex);
     if (p == nullptr || plugin == nullptr || ! juce::isPositiveAndBelow (layerIndex, p->layers.size()))
         return false;
+    // Preparamos la instancia aquí (hilo de mensajes): todavía no está en ningún
+    // rack, así que el hilo de audio no puede verla. NUNCA preparar en el hilo de audio.
+    plugin->prepareToPlay (lastSampleRate, lastMaxBlockSize);
+
     // Se encola: el hilo de audio aplica el cambio en el límite de buffer
     const juce::ScopedLock lock (pendingLock);
     PendingOp op;
@@ -91,10 +104,8 @@ void PatchManager::applyPendingOps()
             continue;
         auto& rack = *p->layers[(size_t) op.layerIndex]->rack;
         if (op.isAdd)
-        {
-            rack.addSlot (std::move (op.plugin));
-            rack.prepare (lastSampleRate, lastMaxBlockSize); // el runtime activo comparte este rack
-        }
+        if (op.isAdd)
+            rack.addSlot (std::move (op.plugin)); // ya vino preparada
         else
         {
             rack.removeSlot (op.slotIndex);

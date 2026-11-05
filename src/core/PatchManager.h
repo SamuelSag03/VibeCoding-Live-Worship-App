@@ -88,6 +88,7 @@ public:
     void selectNextPatch();
     void selectPreviousPatch();
     int getActivePatchIndex() const { return activeIndex.load(); }
+    int getLayerSlotCount (int patchIndex, int layerIndex) const; // thread-safe para la UI
     std::function<void(int)> onPatchChanged;
 
     // --- audio ---
