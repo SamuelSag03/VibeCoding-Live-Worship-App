@@ -229,7 +229,7 @@ void PatchManager::processLayer (const LayerDef& def, PluginRack& rack,
         {
             continue;
         }
-        layerMidi.addEvent (m, meta.getTimeStamp());
+        layerMidi.addEvent (m, meta.samplePosition);
     }
 
     scratchBuf.setSize (2, numSamples, false, false, true);

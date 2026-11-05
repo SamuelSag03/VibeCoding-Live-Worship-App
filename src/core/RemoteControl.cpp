@@ -47,8 +47,8 @@ void RemoteControl::oscMessageReceived (const juce::OSCMessage& message)
 
 void RemoteControl::oscBundleReceived (const juce::OSCBundle& bundle)
 {
-    for (auto& m : bundle)
-        oscMessageReceived (m);
+    for (auto& e : bundle)
+        oscMessageReceived (e.getMessage());
 }
 
 void RemoteControl::handleMidiRemote (const juce::MidiMessage& m)

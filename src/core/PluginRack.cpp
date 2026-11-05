@@ -22,7 +22,7 @@ void PluginRack::fromXml (PluginRack& rack, const juce::XmlElement& rackXml,
         const auto name = slotXml->getStringAttribute ("name");
         for (auto& desc : knownTypes)
         {
-            if (desc.uniqueId == uid || (! name.isEmpty() && desc.name == name))
+            if (desc.createIdentifierString() == uid || (! name.isEmpty() && desc.name == name))
             {
                 juce::String err;
                 slot->plugin = formatManager.createPluginInstance (desc, 48000.0, 512, err);
@@ -44,7 +44,7 @@ juce::XmlElement PluginRack::toXml() const
         slotXml->setAttribute ("gain", (double) s->gain);
         if (s->plugin != nullptr)
         {
-            slotXml->setAttribute ("uid", s->plugin->getPluginDescription().uniqueId);
+            slotXml->setAttribute ("uid", s->plugin->getPluginDescription().createIdentifierString());
             slotXml->setAttribute ("name", s->plugin->getName());
         }
     }
